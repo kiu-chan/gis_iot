@@ -1,195 +1,124 @@
 import 'package:flutter/material.dart';
-// import 'package:ocop/src/data/map/ImageData.dart';
-// import 'package:ocop/src/data/map/MapData.dart';
 
 class Menu extends StatefulWidget {
   final ValueChanged<int> onClickMap;
-  // final ValueChanged<ImageData> onClickImgData;
-  // final ValueChanged<MapData> onClickMapData;
-  // final List<ImageData> imageDataList;
-  // final List<MapData> polygonData;
+
   @override
   _MenuState createState() => _MenuState();
-  Menu({
-    required this.onClickMap,
-    // required this.onClickImgData,
-    // required this.imageDataList,
-    // required this.polygonData,
-    // required this.onClickMapData,
-    });
+  Menu({required this.onClickMap});
 }
 
 class _MenuState extends State<Menu> {
   int? selectedMap = 1;
+
   @override
   Widget build(BuildContext context) {
     return Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: <Widget>[
-            Container(
-              height: 80,
-              child: DrawerHeader(
-                decoration: const BoxDecoration(
-                  color: Colors.blue,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.close, color: Colors.white),
-                      onPressed: () {
-                        Navigator.pop(context); // Đóng Drawer
-                      },
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: <Widget>[
+          Container(
+            height: 80,
+            child: DrawerHeader(
+              decoration: const BoxDecoration(
+                color: Colors.blue,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.close, color: Colors.white),
+                    onPressed: () {
+                      Navigator.pop(context); // Đóng Drawer
+                    },
+                  ),
+                  const Text(
+                    'Hiển thị',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
                     ),
-                    const Text(
-                      'Hiển thị',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            ExpansionTile(
-              leading: const Icon(Icons.api),
-              title: const Text('Bản đồ nền'),
-              subtitle: const Text('Bản đồ mặc định'),
-              children: <Widget>[
-                RadioListTile<int>(
-                  title: const Text('Bản đồ địa lý'),
-                  value: 1,
-                  groupValue: selectedMap,
-                  onChanged: (value) {
-                    setState(() {
-                      selectedMap = value;
-                      // _changeMapSource(0);
-                      widget.onClickMap(0);
-                      // Navigator.pop(context);
-                    });
-                  },
-                ),
-                RadioListTile<int>(
-                  title: Text('Bản đồ vệ tinh'),
-                  value: 2,
-                  groupValue: selectedMap,
-                  onChanged: (value) {
-                    setState(() {
-                      selectedMap = value;
-                      widget.onClickMap(1);
-                      // _changeMapSource(1);
-                      // Navigator.pop(context);
-                    });
-                  },
-                ),
-              ],
-            ),
-            ExpansionTile(
-              leading: Icon(Icons.show_chart),
-              title: Text('Lớp hành chính'),
-              subtitle: Text('Mô tả'),
-              children: <Widget>[
-                CheckboxListTile(
-                  title: Text('Ranh giới'),
-                  value: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: Colors.blue,
-                  onChanged: (bool? value) {
-                    // _changeMapSource(0);
-                    Navigator.pop(context);
-                  },
-                ),
-                CheckboxListTile(
-                  title: Text('Ranh giới huyện'),
-                  value: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: Colors.blue,
-                  onChanged: (bool? value) {
-                    // _changeMapSource(1);
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-            // ExpansionTile(
-            //   leading: Icon(Icons.workspaces_outline),
-            //   title: Text('Lớp sản phẩm'),
-            //   subtitle: Text('Mô tả'),
-            //   children: widget.imageDataList.map((imageData) {
-            //     return CheckboxListTile(
-            //       title: Row(
-            //         children: [
-            //           Text(imageData.title),
-            //           Text(
-            //             " (" + imageData.locations.length.toString() + ")",
-            //             style: const TextStyle(
-            //               color: Colors.blue,
-            //               fontSize: 15,
-            //               fontWeight: FontWeight.bold,
-            //             ),
-            //             ),
-            //         ],
-            //       ),
-            //       value: imageData.checkRender,
-            //       controlAffinity: ListTileControlAffinity.leading,
-            //       activeColor: Colors.blue,
-            //       onChanged: (bool? value) {
-            //         setState(() {
-            //         widget.onClickImgData(imageData);
-            //         });
-            //       },
-            //     );
-            //   }).toList(),
-            // ),
-            // ExpansionTile(
-            //   leading: Icon(Icons.auto_awesome_motion),
-            //   title: Text('Khu vực'),
-            //   subtitle: Text('Mô tả'),
-            //   children: widget.polygonData.map((mapData) {
-            //     return CheckboxListTile(
-            //       title: 
-            //           Text(mapData.mapPath),
-            //       value: mapData.checkRender,
-            //       controlAffinity: ListTileControlAffinity.leading,
-            //       activeColor: Colors.blue,
-            //       onChanged: (bool? value) {
-            //         setState(() {
-            //           widget.onClickMapData(mapData);
-            //         });
-            //       },
-            //     );
-            //   }).toList(),
-            // ),
-            ExpansionTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Danh sách chuồng'),
-              subtitle: const Text('Mô tả'),
-              children: <Widget>[
-                CheckboxListTile(
-                  title: const Text('Bản đồ địa lý'),
-                  value: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: Colors.blue,
-                  onChanged: (bool? value) {
-                    // _changeMapSource(0);
-                  },
-                ),
-                CheckboxListTile(
-                  title: Text('Bản đồ vệ tinh'),
-                  value: true,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: Colors.blue,
-                  onChanged: (bool? value) {
-                    // _changeMapSource(1);
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
+          ),
+          ExpansionTile(
+            leading: const Icon(Icons.api),
+            title: const Text('Bản đồ nền'),
+            subtitle: const Text('Bản đồ mặc định'),
+            children: <Widget>[
+              RadioListTile<int>(
+                title: const Text('Bản đồ địa lý'),
+                value: 1,
+                groupValue: selectedMap,
+                onChanged: (value) {
+                  setState(() {
+                    selectedMap = value;
+                    widget.onClickMap(0);
+                  });
+                },
+              ),
+              RadioListTile<int>(
+                title: Text('Bản đồ vệ tinh'),
+                value: 2,
+                groupValue: selectedMap,
+                onChanged: (value) {
+                  setState(() {
+                    selectedMap = value;
+                    widget.onClickMap(1);
+                  });
+                },
+              ),
+            ],
+          ),
+          ExpansionTile(
+            leading: Icon(Icons.show_chart),
+            title: Text('Lớp hành chính'),
+            subtitle: Text('Mô tả'),
+            children: <Widget>[
+              CheckboxListTile(
+                title: Text('Ranh giới'),
+                value: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: Colors.blue,
+                onChanged: (bool? value) {
+                  // Implement logic to show/hide boundaries
+                  Navigator.pop(context);
+                },
+              ),
+              CheckboxListTile(
+                title: Text('Ranh giới huyện'),
+                value: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: Colors.blue,
+                onChanged: (bool? value) {
+                  // Implement logic to show/hide district boundaries
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+          ExpansionTile(
+            leading: const Icon(Icons.home),
+            title: const Text('Danh sách chuồng'),
+            subtitle: const Text('Mô tả'),
+            children: <Widget>[
+              CheckboxListTile(
+                title: const Text('Hiển thị tất cả'),
+                value: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                activeColor: Colors.blue,
+                onChanged: (bool? value) {
+                  // Implement logic to show/hide all cages
+                },
+              ),
+              // You can add more CheckboxListTile widgets here for individual cages
+              // if you want to allow toggling visibility for each cage separately
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
-

@@ -1,17 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_map/flutter_map.dart';
+import 'package:gis_iot/src/database/database.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:convert';
-import 'package:gis_iot/src/map/elements/menu.dart';
-
-class MapPoint {
-  final String name;
-  final String description;
-  final LatLng location;
-
-  MapPoint({required this.name, required this.description, required this.location});
-}
 
 class MapPage extends StatefulWidget {
   @override
@@ -26,24 +18,15 @@ class _MapPageState extends State<MapPage> {
   final LatLng mapLat = LatLng(22.406276, 105.624405);  // Tọa độ mặc định
 
   List<Polygon> polygons = [];
-  List<MapPoint> mapPoints = [
-    MapPoint(
-      name: "Điểm A",
-      description: "Đây là mô tả cho Điểm A",
-      location: LatLng(22.406276, 105.624405),
-    ),
-    MapPoint(
-      name: "Điểm B",
-      description: "Đây là mô tả cho Điểm B",
-      location: LatLng(22.416276, 105.634405),
-    ),
-    // Thêm các điểm khác vào đây
-  ];
+  List<MapPoint> mapPoints = [];
+  late DatabaseHelper dbHelper;
 
   @override
   void initState() {
     super.initState();
+    dbHelper = DatabaseHelper();
     loadGeoJson();
+    loadCagePoints();
   }
 
   Future<void> loadGeoJson() async {
@@ -69,13 +52,35 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  void _showPopup(MapPoint point) {
+  Future<void> loadCagePoints() async {
+    await dbHelper.connect();
+    List<MapPoint> points = await dbHelper.getCagePoints();
+    setState(() {
+      mapPoints = points;
+    });
+  }
+
+  void _showPopup(MapPoint point) async {
+    List<Pet> pets = await dbHelper.getPetsForCage(point.id);
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text(point.name),
-          content: Text(point.description),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(point.description),
+                SizedBox(height: 10),
+                Text('Danh sách các con vật:'),
+                ...pets.map((pet) => ListTile(
+                  title: Text(pet.name),
+                  subtitle: Text('Ngày sinh: ${pet.bornOn.toLocal().toString().split(' ')[0]}'),
+                )).toList(),
+              ],
+            ),
+          ),
           actions: <Widget>[
             TextButton(
               child: Text('Đóng'),
@@ -89,35 +94,74 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
+  void _zoomIn() {
+    currentZoom = (mapController.zoom + 1).clamp(1.0, 18.0);
+    mapController.move(mapController.center, currentZoom);
+  }
+
+  void _zoomOut() {
+    currentZoom = (mapController.zoom - 1).clamp(1.0, 18.0);
+    mapController.move(mapController.center, currentZoom);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Bản đồ")),
-      body: FlutterMap(
-        mapController: mapController,
-        options: MapOptions(
-          center: mapLat,
-          zoom: currentZoom,
-        ),
-        nonRotatedChildren: [
-          TileLayer(
-            urlTemplate: mapUrl,
-            userAgentPackageName: namePackage,
-          ),
-          PolygonLayer(polygons: polygons),
-          MarkerLayer(
-            markers: mapPoints.map((point) => Marker(
-              width: 80.0,
-              height: 80.0,
-              point: point.location,
-              builder: (ctx) => GestureDetector(
-                onTap: () => _showPopup(point),
-                child: Icon(Icons.location_on, color: Colors.red, size: 40),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: mapController,
+            options: MapOptions(
+              center: mapLat,
+              zoom: currentZoom,
+            ),
+            nonRotatedChildren: [
+              TileLayer(
+                urlTemplate: mapUrl,
+                userAgentPackageName: namePackage,
               ),
-            )).toList(),
+              PolygonLayer(polygons: polygons),
+              MarkerLayer(
+                markers: mapPoints.map((point) => Marker(
+                  width: 80.0,
+                  height: 80.0,
+                  point: point.location,
+                  builder: (ctx) => GestureDetector(
+                    onTap: () => _showPopup(point),
+                    child: Icon(Icons.location_on, color: Colors.red, size: 40),
+                  ),
+                )).toList(),
+              ),
+            ],
+          ),
+          Positioned(
+            right: 20,
+            bottom: 20,
+            child: Column(
+              children: [
+                FloatingActionButton(
+                  heroTag: "zoomIn",
+                  onPressed: _zoomIn,
+                  child: Icon(Icons.add),
+                ),
+                SizedBox(height: 10),
+                FloatingActionButton(
+                  heroTag: "zoomOut",
+                  onPressed: _zoomOut,
+                  child: Icon(Icons.remove),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    dbHelper.close();
+    super.dispose();
   }
 }
