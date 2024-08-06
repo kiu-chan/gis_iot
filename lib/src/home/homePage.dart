@@ -1,7 +1,7 @@
-// homePage.dart
-
 import 'package:flutter/material.dart';
 import 'package:gis_iot/src/database/database.dart';
+import 'package:intl/intl.dart';
+import 'package:gis_iot/src/pet/petListPage.dart';
 
 class HomePage extends StatefulWidget {
   @override
@@ -13,6 +13,10 @@ class _HomePageState extends State<HomePage> {
   double _currentTemperature = 0;
   List<String> _alerts = [];
   bool _isLoading = true;
+  Cage? _currentCage;
+  Task? _nextTask;
+  List<Task> _completedTasksToday = [];
+  List<SpeciesCount> _speciesCounts = [];
 
   @override
   void initState() {
@@ -21,15 +25,37 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
     final db = DatabaseHelper();
     await db.connect();
     
-    // Lấy danh sách các cage
     final cages = await db.getCages();
     
-    // Nếu có ít nhất một cage, lấy nhiệt độ của cage đầu tiên
     if (cages.isNotEmpty) {
-      final temperatures = await db.getTemperaturesForCage(cages.first);
+      _currentCage = cages.first;
+      final temperatures = await db.getTemperaturesForCage(_currentCage!.id);
+      
+      // Lấy công việc tiếp theo cần làm
+      List<Task> tasks = await db.getTasks();
+      _nextTask = tasks.where(
+        (task) => !task.done && (task.time == null || task.time!.isAfter(DateTime.now()))
+      ).firstOrNull;
+      
+      // Lấy danh sách công việc đã hoàn thành trong ngày
+      _completedTasksToday = tasks.where((task) => 
+        task.done && 
+        task.time != null && 
+        task.time!.year == DateTime.now().year &&
+        task.time!.month == DateTime.now().month &&
+        task.time!.day == DateTime.now().day
+      ).toList();
+
+      // Lấy danh sách các loài và số lượng
+      _speciesCounts = await db.getSpeciesCounts();
+
       await db.close();
 
       setState(() {
@@ -54,7 +80,6 @@ class _HomePageState extends State<HomePage> {
     if (_currentTemperature < 10) {
       _alerts.add("Cảnh báo nhiệt độ thấp: ${_currentTemperature.toStringAsFixed(1)}°C");
     }
-    // Thêm các điều kiện cảnh báo khác nếu cần
   }
 
   @override
@@ -62,6 +87,17 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text("Trang chủ"),
+        actions: [
+        IconButton(
+          icon: Icon(Icons.pets),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => PetListPage()),
+            );
+          },
+        ),
+      ],
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
@@ -76,6 +112,12 @@ class _HomePageState extends State<HomePage> {
                     _buildRecentTemperatures(),
                     SizedBox(height: 20),
                     _buildAlerts(),
+                    SizedBox(height: 20),
+                    _buildNextTask(),
+                    SizedBox(height: 20),
+                    _buildCompletedTasks(),
+                    SizedBox(height: 20),
+                    _buildSpeciesList(),
                   ],
                 ),
               ),
@@ -90,7 +132,7 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           children: [
             Text(
-              "Nhiệt độ hiện tại",
+              "Nhiệt độ hiện tại${_currentCage != null ? ' - ${_currentCage!.name}' : ''}",
               style: Theme.of(context).textTheme.titleLarge,
             ),
             SizedBox(height: 10),
@@ -161,6 +203,173 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNextTask() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Công việc tiếp theo",
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            SizedBox(height: 10),
+            _nextTask != null
+                ? ListTile(
+                    title: Text(_nextTask!.workContent),
+                    subtitle: Text(_nextTask!.time != null
+                        ? "Thời gian: ${DateFormat('HH:mm dd/MM/yyyy').format(_nextTask!.time!)}"
+                        : "Không có thời gian cụ thể"),
+                    trailing: ElevatedButton(
+                      child: Text("Hoàn thành"),
+                      onPressed: () => _completeTask(_nextTask!),
+                    ),
+                    onTap: () => _showTaskDetails(_nextTask!),
+                  )
+                : Text("Không có công việc nào sắp tới"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompletedTasks() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Công việc đã hoàn thành hôm nay",
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            SizedBox(height: 10),
+            Container(
+              height: 200,
+              child: _completedTasksToday.isEmpty
+                  ? Text("Chưa có công việc nào hoàn thành hôm nay.")
+                  : ListView.builder(
+                      itemCount: _completedTasksToday.length,
+                      itemBuilder: (context, index) {
+                        final task = _completedTasksToday[index];
+                        return ListTile(
+                          title: Text(task.workContent),
+                          subtitle: Text(task.time != null 
+                            ? DateFormat('HH:mm').format(task.time!) 
+                            : 'Không có thời gian'),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpeciesList() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Danh sách các loài",
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            SizedBox(height: 10),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: _speciesCounts.length,
+              itemBuilder: (context, index) {
+                final species = _speciesCounts[index];
+                return ListTile(
+                  title: Text(species.species),
+                  trailing: Text(species.quantity.toString()),
+                  onTap: () => _showPetsBySpecies(species.species),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTaskDetails(Task task) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Chi tiết công việc'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text('Nội dung: ${task.workContent}'),
+                SizedBox(height: 10),
+                Text('Thời gian: ${task.time != null ? DateFormat('HH:mm dd/MM/yyyy').format(task.time!) : 'Không có'}'),
+                SizedBox(height: 10),
+                Text('Ghi chú: ${task.note ?? 'Không có'}'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Đóng'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _completeTask(Task task) async {
+    final db = DatabaseHelper();
+    await db.connect();
+    await db.updateTaskStatus(task.id, true);
+    await db.close();
+    _loadData();  // Reload data after completing the task
+  }
+
+  void _showPetsBySpecies(String species) async {
+    final db = DatabaseHelper();
+    await db.connect();
+    List<Pet> pets = await db.getPetsBySpecies(species);
+    await db.close();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Danh sách $species'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: pets.map((pet) => ListTile(
+                title: Text(pet.name),
+                subtitle: Text('Mã: ${pet.petCode}\nNgày sinh: ${DateFormat('dd/MM/yyyy').format(pet.bornOn)}'),
+              )).toList(),
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Đóng'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }

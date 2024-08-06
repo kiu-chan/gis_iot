@@ -15,8 +15,8 @@ class _ChartPageState extends State<ChartPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   List<FlSpot> _spots = [];
   bool _isLoading = true;
-  List<String> _cages = [];
-  String? _selectedCage;
+  List<Cage> _cages = [];
+  Cage? _selectedCage;
   DataType _dataType = DataType.temperature;
 
   @override
@@ -35,14 +35,14 @@ class _ChartPageState extends State<ChartPage> {
       _cages = cages;
       if (cages.isNotEmpty) {
         _selectedCage = cages.first;
-        _loadData(_selectedCage!);
+        _loadData(_selectedCage!.id);
       } else {
         _isLoading = false;
       }
     });
   }
 
-  Future<void> _loadData(String cage) async {
+  Future<void> _loadData(int cageId) async {
     setState(() {
       _isLoading = true;
     });
@@ -51,8 +51,8 @@ class _ChartPageState extends State<ChartPage> {
       final db = DatabaseHelper();
       await db.connect();
       final data = _dataType == DataType.temperature
-          ? await db.getTemperaturesForCage(cage)
-          : await db.getHumiditiesForCage(cage);
+          ? await db.getTemperaturesForCage(cageId)
+          : await db.getHumiditiesForCage(cageId);
       await db.close();
 
       setState(() {
@@ -112,7 +112,7 @@ class _ChartPageState extends State<ChartPage> {
                     setState(() {
                       _dataType = value!;
                       if (_selectedCage != null) {
-                        _loadData(_selectedCage!);
+                        _loadData(_selectedCage!.id);
                       }
                     });
                     Navigator.pop(context);
@@ -126,7 +126,7 @@ class _ChartPageState extends State<ChartPage> {
                     setState(() {
                       _dataType = value!;
                       if (_selectedCage != null) {
-                        _loadData(_selectedCage!);
+                        _loadData(_selectedCage!.id);
                       }
                     });
                     Navigator.pop(context);
@@ -137,14 +137,14 @@ class _ChartPageState extends State<ChartPage> {
             ExpansionTile(
               title: Text('Cages'),
               children: _cages.map((cage) {
-                return RadioListTile<String>(
-                  title: Text(cage),
+                return RadioListTile<Cage>(
+                  title: Text(cage.name),
                   value: cage,
                   groupValue: _selectedCage,
-                  onChanged: (String? value) {
+                  onChanged: (Cage? value) {
                     setState(() {
                       _selectedCage = value;
-                      _loadData(value!);
+                      _loadData(value!.id);
                     });
                     Navigator.pop(context);
                   },
@@ -161,7 +161,7 @@ class _ChartPageState extends State<ChartPage> {
               child: Column(
                 children: [
                   Text(
-                    'Selected Cage: ${_selectedCage ?? "None"}',
+                    'Selected Cage: ${_selectedCage?.name ?? "None"}',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   SizedBox(height: 16),

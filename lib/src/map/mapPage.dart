@@ -1,3 +1,5 @@
+// mapPage.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_map/flutter_map.dart';
@@ -62,6 +64,8 @@ class _MapPageState extends State<MapPage> {
 
   void _showPopup(MapPoint point) async {
     List<Pet> pets = await dbHelper.getPetsForCage(point.id);
+    double? latestTemperature = await dbHelper.getLatestTemperatureForCage(point.id);
+    double? latestHumidity = await dbHelper.getLatestHumidityForCage(point.id);
     
     showDialog(
       context: context,
@@ -72,6 +76,11 @@ class _MapPageState extends State<MapPage> {
             child: ListBody(
               children: <Widget>[
                 Text(point.description),
+                SizedBox(height: 10),
+                if (latestTemperature != null)
+                  Text('Nhiệt độ mới nhất: ${latestTemperature.toStringAsFixed(1)}°C'),
+                if (latestHumidity != null)
+                  Text('Độ ẩm mới nhất: ${latestHumidity.toStringAsFixed(1)}%'),
                 SizedBox(height: 10),
                 Text('Danh sách các con vật:'),
                 ...pets.map((pet) => ListTile(

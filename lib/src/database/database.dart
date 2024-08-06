@@ -14,85 +14,325 @@ class Pet {
   final int id;
   final String name;
   final DateTime bornOn;
+  final String petCode;
 
-  Pet({required this.id, required this.name, required this.bornOn});
+  Pet({required this.id, required this.name, required this.bornOn, required this.petCode});
+}
+
+class Cage {
+  final int id;
+  final String name;
+
+  Cage({required this.id, required this.name});
+}
+
+class Task {
+  final int id;
+  final String workContent;
+  final String? note;
+  final int? petId;
+  final DateTime? time;
+  final DateTime createdAt;
+  bool done;
+
+  Task({
+    required this.id,
+    required this.workContent,
+    this.note,
+    this.petId,
+    this.time,
+    required this.createdAt,
+    required this.done,
+  });
+}
+
+class PetWithCage {
+  final int id;
+  final String name;
+  final DateTime bornOn;
+  final String petCode;
+  final String species;
+  final String cageName;
+
+  PetWithCage({
+    required this.id,
+    required this.name,
+    required this.bornOn,
+    required this.petCode,
+    required this.species,
+    required this.cageName,
+  });
+}
+
+class SpeciesCount {
+  final String species;
+  final int quantity;
+
+  SpeciesCount({required this.species, required this.quantity});
 }
 
 class DatabaseHelper {
-  static final DatabaseHelper _instance = DatabaseHelper._internal();
-  factory DatabaseHelper() => _instance;
-
-  late Connection _connection;
-
-  DatabaseHelper._internal();
+  PostgreSQLConnection? connection;
 
   Future<void> connect() async {
-    _connection = await Connection.open(
-      Endpoint(
-        host: "192.168.2.9",
-        port: 5432,
-        database: "gis_iot",
-        username: "postgres",
-        password: "123456" // Thay thế bằng mật khẩu thực tế
-      ),
+    connection = PostgreSQLConnection(
+      '192.168.1.24',
+      5432,
+      'gis_iot',
+      username: 'postgres',
+      password: '123456',
     );
+    await connection!.open();
+    print('Connected to PostgreSQL database.');
   }
 
-  Future<List<String>> getCages() async {
-    final results = await _connection.execute('SELECT DISTINCT cage FROM temperature');
-    return results.map<String>((row) => row[0].toString()).toList();
+  Future<List<Cage>> getCages() async {
+    try {
+      final results = await connection!.query('SELECT id, name FROM cage');
+      return results.map((row) => Cage(id: row[0] as int, name: row[1] as String)).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn danh sách cage: $e');
+      return [];
+    }
   }
 
-  Future<List<double>> getTemperaturesForCage(String cage) async {
-    final results = await _connection.execute(
-      'SELECT value FROM temperature WHERE cage = \$1 ORDER BY created_at DESC LIMIT 24',
-      parameters: [cage],
-    );
-    return results.map<double>((row) => double.parse(row[0].toString())).toList();
+  Future<List<double>> getTemperaturesForCage(int cageId) async {
+    try {
+      final results = await connection!.query(
+        'SELECT value FROM temperature WHERE cage_id = @cageId ORDER BY created_at DESC LIMIT 24',
+        substitutionValues: {'cageId': cageId},
+      );
+      return results.map<double>((row) => double.parse(row[0].toString())).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn nhiệt độ cho cage: $e');
+      return [];
+    }
   }
 
-  Future<List<double>> getHumiditiesForCage(String cage) async {
-    final results = await _connection.execute(
-      'SELECT value FROM humidity WHERE cage = \$1 ORDER BY created_at DESC LIMIT 24',
-      parameters: [cage],
-    );
-    return results.map<double>((row) => double.parse(row[0].toString())).toList();
+  Future<List<double>> getHumiditiesForCage(int cageId) async {
+    try {
+      final results = await connection!.query(
+        'SELECT value FROM humidity WHERE cage_id = @cageId ORDER BY created_at DESC LIMIT 24',
+        substitutionValues: {'cageId': cageId},
+      );
+      return results.map<double>((row) => double.parse(row[0].toString())).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn độ ẩm cho cage: $e');
+      return [];
+    }
   }
 
   Future<List<MapPoint>> getCagePoints() async {
-    final results = await _connection.execute(
-      "SELECT id, name, ST_AsText(geom) as geom FROM cage"
-    );
-    
-    return results.map<MapPoint>((row) {
-      String geomText = row[2].toString();
-      List<String> coords = geomText.replaceAll('POINT(', '').replaceAll(')', '').split(' ');
-      double longitude = double.parse(coords[0]);
-      double latitude = double.parse(coords[1]);
-      
-      return MapPoint(
-        id: row[0] as int,
-        name: row[1].toString(),
-        description: "Chuồng ${row[1]}",
-        location: LatLng(latitude, longitude),
+    try {
+      final results = await connection!.query(
+        "SELECT id, name, ST_AsText(geom) as geom FROM cage"
       );
-    }).toList();
+      
+      return results.map<MapPoint>((row) {
+        String geomText = row[2].toString();
+        List<String> coords = geomText.replaceAll('POINT(', '').replaceAll(')', '').split(' ');
+        double longitude = double.parse(coords[0]);
+        double latitude = double.parse(coords[1]);
+        
+        return MapPoint(
+          id: row[0] as int,
+          name: row[1].toString(),
+          description: "Chuồng ${row[1]}",
+          location: LatLng(latitude, longitude),
+        );
+      }).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn điểm cage: $e');
+      return [];
+    }
   }
 
   Future<List<Pet>> getPetsForCage(int cageId) async {
-    final results = await _connection.execute(
-      'SELECT id, name, born_on FROM pet WHERE cage_id = \$1',
-      parameters: [cageId],
-    );
-    
-    return results.map((row) => Pet(
-      id: row[0] as int,
-      name: row[1] as String,
-      bornOn: row[2] as DateTime,
-    )).toList();
+    try {
+      final results = await connection!.query(
+        'SELECT id, name, born_on, pet_code FROM pet WHERE cage_id = @cageId',
+        substitutionValues: {'cageId': cageId},
+      );
+      
+      return results.map((row) => Pet(
+        id: row[0] as int,
+        name: row[1] as String,
+        bornOn: row[2] as DateTime,
+        petCode: row[3] as String,
+      )).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn danh sách pet cho cage: $e');
+      return [];
+    }
+  }
+
+  Future<double?> getLatestTemperatureForCage(int cageId) async {
+    try {
+      final results = await connection!.query(
+        'SELECT value FROM temperature WHERE cage_id = @cageId ORDER BY created_at DESC LIMIT 1',
+        substitutionValues: {'cageId': cageId},
+      );
+      if (results.isNotEmpty) {
+        return double.parse(results[0][0].toString());
+      }
+      return null;
+    } catch (e) {
+      print('Lỗi khi truy vấn nhiệt độ mới nhất cho cage: $e');
+      return null;
+    }
+  }
+
+  Future<double?> getLatestHumidityForCage(int cageId) async {
+    try {
+      final results = await connection!.query(
+        'SELECT value FROM humidity WHERE cage_id = @cageId ORDER BY created_at DESC LIMIT 1',
+        substitutionValues: {'cageId': cageId},
+      );
+      if (results.isNotEmpty) {
+        return double.parse(results[0][0].toString());
+      }
+      return null;
+    } catch (e) {
+      print('Lỗi khi truy vấn độ ẩm mới nhất cho cage: $e');
+      return null;
+    }
+  }
+
+  Future<List<Task>> getTasks() async {
+    try {
+      final results = await connection!.query('''
+        SELECT id, work_content, note, pet_id, time, created_at, done 
+        FROM tasks 
+        ORDER BY created_at DESC
+      ''');
+      
+      return results.map((row) => Task(
+        id: row[0] as int,
+        workContent: row[1] as String,
+        note: row[2] as String?,
+        petId: row[3] as int?,
+        time: row[4] as DateTime?,
+        createdAt: row[5] as DateTime,
+        done: row[6] as bool,
+      )).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn danh sách task: $e');
+      return [];
+    }
+  }
+
+  Future<void> updateTaskStatus(int id, bool isDone) async {
+    try {
+      await connection!.query(
+        'UPDATE tasks SET done = @isDone WHERE id = @id',
+        substitutionValues: {
+          'isDone': isDone,
+          'id': id,
+        },
+      );
+    } catch (e) {
+      print('Lỗi khi cập nhật trạng thái task: $e');
+    }
+  }
+
+  Future<void> addTask(String workContent, int? petId, DateTime? time) async {
+    try {
+      await connection!.query(
+        'INSERT INTO tasks (work_content, pet_id, time) VALUES (@workContent, @petId, @time)',
+        substitutionValues: {
+          'workContent': workContent,
+          'petId': petId,
+          'time': time,
+        },
+      );
+    } catch (e) {
+      print('Lỗi khi thêm task mới: $e');
+    }
+  }
+
+  Future<void> deleteTask(int id) async {
+    try {
+      await connection!.query(
+        'DELETE FROM tasks WHERE id = @id',
+        substitutionValues: {
+          'id': id,
+        },
+      );
+    } catch (e) {
+      print('Lỗi khi xóa task: $e');
+    }
+  }
+
+  Future<void> updateTaskNote(int id, String note) async {
+    try {
+      await connection!.query(
+        'UPDATE tasks SET note = @note WHERE id = @id',
+        substitutionValues: {
+          'note': note,
+          'id': id,
+        },
+      );
+    } catch (e) {
+      print('Lỗi khi cập nhật ghi chú task: $e');
+    }
+  }
+
+  Future<List<SpeciesCount>> getSpeciesCounts() async {
+    try {
+      final results = await connection!.query('SELECT species, quantity FROM species_count');
+      return results.map((row) => SpeciesCount(
+        species: row[0] as String,
+        quantity: row[1] as int,
+      )).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn danh sách species_count: $e');
+      return [];
+    }
+  }
+
+  Future<List<Pet>> getPetsBySpecies(String species) async {
+    try {
+      final results = await connection!.query(
+        'SELECT id, name, born_on, pet_code FROM pet WHERE species = @species',
+        substitutionValues: {'species': species},
+      );
+      
+      return results.map((row) => Pet(
+        id: row[0] as int,
+        name: row[1] as String,
+        bornOn: row[2] as DateTime,
+        petCode: row[3] as String,
+      )).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn danh sách pet cho loài: $e');
+      return [];
+    }
+  }
+
+  Future<List<PetWithCage>> getAllPetsWithCage() async {
+    try {
+      final results = await connection!.query('''
+        SELECT p.id, p.name, p.born_on, p.pet_code, c.name as cage_name
+        FROM pet p
+        JOIN cage c ON p.cage_id = c.id
+      ''');
+      
+      return results.map((row) => PetWithCage(
+        id: row[0] as int,
+        name: row[1] as String,
+        bornOn: row[2] as DateTime,
+        petCode: row[3] as String,
+        species: row[1] as String,
+        cageName: row[4] as String,
+      )).toList();
+    } catch (e) {
+      print('Lỗi khi truy vấn danh sách tất cả pet với cage: $e');
+      return [];
+    }
   }
 
   Future<void> close() async {
-    await _connection.close();
+    await connection!.close();
+    print('Connection closed.');
   }
 }
