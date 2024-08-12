@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gis_iot/src/database/database.dart';
+import 'package:gis_iot/src/pet/PetDetailPage.dart';
 import 'package:intl/intl.dart';
 
 class PetListPage extends StatefulWidget {
@@ -9,10 +10,13 @@ class PetListPage extends StatefulWidget {
 
 class _PetListPageState extends State<PetListPage> {
   List<PetWithCage> _pets = [];
-  List<SpeciesCount> _speciesCounts = [];
+  List<Cage> _cages = [];
   bool _isLoading = true;
   String _searchQuery = "";
-  String? _selectedSpecies;
+  Set<String> _selectedNames = Set<String>();
+  Set<String> _selectedCages = Set<String>();
+
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -28,7 +32,7 @@ class _PetListPageState extends State<PetListPage> {
     final db = DatabaseHelper();
     await db.connect();
     _pets = await db.getAllPetsWithCage();
-    _speciesCounts = await db.getSpeciesCounts();
+    _cages = await db.getCages();
     await db.close();
 
     setState(() {
@@ -39,17 +43,32 @@ class _PetListPageState extends State<PetListPage> {
   List<PetWithCage> get filteredPets {
     return _pets.where((pet) {
       final matchesSearch = pet.petCode.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesSpecies = _selectedSpecies == null || pet.species == _selectedSpecies;
-      return matchesSearch && matchesSpecies;
+      final matchesName = _selectedNames.isEmpty || _selectedNames.contains(pet.name);
+      final matchesCage = _selectedCages.isEmpty || _selectedCages.contains(pet.cageName);
+      return matchesSearch && matchesName && matchesCage;
     }).toList();
+  }
+
+  List<String> get uniquePetNames {
+    return _pets.map((pet) => pet.name).toSet().toList()..sort();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Text("Danh sách các con vật"),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.filter_list),
+            onPressed: () {
+              _scaffoldKey.currentState?.openEndDrawer();
+            },
+          ),
+        ],
       ),
+      endDrawer: _buildFilterDrawer(),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
           : Column(
@@ -69,31 +88,6 @@ class _PetListPageState extends State<PetListPage> {
                     },
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    hint: Text("Chọn loài"),
-                    value: _selectedSpecies,
-                    items: [
-                      DropdownMenuItem<String>(
-                        value: null,
-                        child: Text("Tất cả các loài"),
-                      ),
-                      ..._speciesCounts.map((species) {
-                        return DropdownMenuItem<String>(
-                          value: species.species,
-                          child: Text("${species.species} (${species.quantity})"),
-                        );
-                      }).toList(),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedSpecies = value;
-                      });
-                    },
-                  ),
-                ),
                 Expanded(
                   child: ListView.builder(
                     itemCount: filteredPets.length,
@@ -103,16 +97,93 @@ class _PetListPageState extends State<PetListPage> {
                         title: Text(pet.name),
                         subtitle: Text(
                           'Mã: ${pet.petCode}\n'
-                          'Loài: ${pet.species}\n'
                           'Ngày sinh: ${DateFormat('dd/MM/yyyy').format(pet.bornOn)}\n'
                           'Chuồng: ${pet.cageName}'
                         ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PetDetailPage(pet: pet),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildFilterDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                "Bộ lọc",
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                children: [
+                  ExpansionTile(
+                    title: Text("Lọc theo tên"),
+                    children: uniquePetNames.map((name) {
+                      return CheckboxListTile(
+                        title: Text(name),
+                        value: _selectedNames.contains(name),
+                        onChanged: (bool? value) {
+                          setState(() {
+                            if (value == true) {
+                              _selectedNames.add(name);
+                            } else {
+                              _selectedNames.remove(name);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  ExpansionTile(
+                    title: Text("Lọc theo chuồng"),
+                    children: _cages.map((cage) {
+                      return CheckboxListTile(
+                        title: Text(cage.name),
+                        value: _selectedCages.contains(cage.name),
+                        onChanged: (bool? value) {
+                          setState(() {
+                            if (value == true) {
+                              _selectedCages.add(cage.name);
+                            } else {
+                              _selectedCages.remove(cage.name);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton(
+                child: Text("Áp dụng"),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

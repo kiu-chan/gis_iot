@@ -32,7 +32,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> loadGeoJson() async {
-    String jsonString = await rootBundle.loadString('lib/assets/geojson/vungDem.geojson');
+    String jsonString = await rootBundle.loadString('lib/assets/geojson/vungLoi.geojson');
     final jsonResult = json.decode(jsonString);
 
     setState(() {
@@ -46,9 +46,10 @@ class _MapPageState extends State<MapPage> {
 
         return Polygon(
           points: polygonCoords,
-          color: Colors.blue.withOpacity(0.3),
+          color: Colors.blue.withOpacity(0.2),  // Màu đổ bên trong
           borderColor: Colors.blue,
           borderStrokeWidth: 2,
+          isFilled: true,  // Đảm bảo polygon được đổ màu
         );
       }).toList();
     });

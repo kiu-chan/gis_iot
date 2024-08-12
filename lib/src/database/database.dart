@@ -51,7 +51,6 @@ class PetWithCage {
   final String name;
   final DateTime bornOn;
   final String petCode;
-  final String species;
   final String cageName;
 
   PetWithCage({
@@ -59,7 +58,6 @@ class PetWithCage {
     required this.name,
     required this.bornOn,
     required this.petCode,
-    required this.species,
     required this.cageName,
   });
 }
@@ -71,12 +69,38 @@ class SpeciesCount {
   SpeciesCount({required this.species, required this.quantity});
 }
 
+class MedicalHistory {
+  final int id;
+  final int petId;
+  final DateTime examinationDate;
+  final String? symptoms;
+  final String? diagnosis;
+  final String? treatment;
+  final String? veterinarian;
+  final String? notes;
+  final DateTime createdAt;
+  final String? currentStatus;
+
+  MedicalHistory({
+    required this.id,
+    required this.petId,
+    required this.examinationDate,
+    this.symptoms,
+    this.diagnosis,
+    this.treatment,
+    this.veterinarian,
+    this.notes,
+    required this.createdAt,
+    this.currentStatus,
+  });
+}
+
 class DatabaseHelper {
   PostgreSQLConnection? connection;
 
   Future<void> connect() async {
     connection = PostgreSQLConnection(
-      '192.168.1.24',
+      '172.20.10.4',
       5432,
       'gis_iot',
       username: 'postgres',
@@ -309,24 +333,51 @@ class DatabaseHelper {
     }
   }
 
-  Future<List<PetWithCage>> getAllPetsWithCage() async {
+Future<List<PetWithCage>> getAllPetsWithCage() async {
+  try {
+    final results = await connection!.query('''
+      SELECT p.id, p.name, p.born_on, p.pet_code, c.name as cage_name
+      FROM pet p
+      JOIN cage c ON p.cage_id = c.id
+    ''');
+    
+    return results.map((row) => PetWithCage(
+      id: row[0] as int,
+      name: row[1] as String,
+      bornOn: row[2] as DateTime,
+      petCode: row[3] as String,
+      cageName: row[4] as String,
+    )).toList();
+  } catch (e) {
+    print('Lỗi khi truy vấn danh sách tất cả pet với cage: $e');
+    return [];
+  }
+}
+
+  Future<List<MedicalHistory>> getMedicalHistoryForPet(int petId) async {
     try {
       final results = await connection!.query('''
-        SELECT p.id, p.name, p.born_on, p.pet_code, c.name as cage_name
-        FROM pet p
-        JOIN cage c ON p.cage_id = c.id
-      ''');
-      
-      return results.map((row) => PetWithCage(
+        SELECT id, pet_id, examination_date, symptoms, diagnosis, treatment, 
+               veterinarian, notes, created_at, current_status
+        FROM medical_history
+        WHERE pet_id = @petId
+        ORDER BY examination_date DESC
+      ''', substitutionValues: {'petId': petId});
+
+      return results.map((row) => MedicalHistory(
         id: row[0] as int,
-        name: row[1] as String,
-        bornOn: row[2] as DateTime,
-        petCode: row[3] as String,
-        species: row[1] as String,
-        cageName: row[4] as String,
+        petId: row[1] as int,
+        examinationDate: row[2] as DateTime,
+        symptoms: row[3] as String?,
+        diagnosis: row[4] as String?,
+        treatment: row[5] as String?,
+        veterinarian: row[6] as String?,
+        notes: row[7] as String?,
+        createdAt: row[8] as DateTime,
+        currentStatus: row[9] as String?,
       )).toList();
     } catch (e) {
-      print('Lỗi khi truy vấn danh sách tất cả pet với cage: $e');
+      print('Lỗi khi truy vấn lịch sử sức khỏe cho pet: $e');
       return [];
     }
   }
