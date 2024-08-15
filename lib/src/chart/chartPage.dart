@@ -3,8 +3,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:gis_iot/src/database/database.dart';
 import 'package:intl/intl.dart';
 
-enum DataType { temperature, humidity }
-
 class ChartPage extends StatefulWidget {
   @override
   _ChartPageState createState() => _ChartPageState();
@@ -12,13 +10,16 @@ class ChartPage extends StatefulWidget {
 
 class _ChartPageState extends State<ChartPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  List<FlSpot> _spots = [];
+  List<FlSpot> _temperatureSpots = [];
+  List<FlSpot> _humiditySpots = [];
   bool _isLoading = true;
   List<Cage> _cages = [];
   Cage? _selectedCage;
-  DataType _dataType = DataType.humidity;
   DateTime _selectedDate = DateTime.now();
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd');
+  final DateFormat _timeFormat = DateFormat('HH:mm');
+  double _minX = 0;
+  double _maxX = 24;
 
   @override
   void initState() {
@@ -36,14 +37,16 @@ class _ChartPageState extends State<ChartPage> {
       _cages = cages;
       if (cages.isNotEmpty) {
         _selectedCage = cages.first;
-        _loadData(_selectedCage!.id);
+        _loadData();
       } else {
         _isLoading = false;
       }
     });
   }
 
-  Future<void> _loadData(int cageId) async {
+  Future<void> _loadData() async {
+    if (_selectedCage == null) return;
+
     setState(() {
       _isLoading = true;
     });
@@ -51,23 +54,41 @@ class _ChartPageState extends State<ChartPage> {
     try {
       final db = DatabaseHelper();
       await db.connect();
-      final data = _dataType == DataType.temperature
-          ? await db.getTemperaturesForCage(cageId)
-          : await db.getHumiditiesForCage(cageId);
+      final temperatures = await db.getTemperaturesForCageAndDate(_selectedCage!.id, _selectedDate);
+      final humidities = await db.getHumiditiesForCageAndDate(_selectedCage!.id, _selectedDate);
       await db.close();
 
       setState(() {
-        _spots = data.asMap().entries.map((entry) {
-          return FlSpot(entry.key.toDouble(), entry.value);
-        }).toList();
+        _temperatureSpots = _convertToSpots(temperatures);
+        _humiditySpots = _convertToSpots(humidities);
+        _updateXAxisRange();
         _isLoading = false;
       });
     } catch (e) {
       print('Error loading data: $e');
       setState(() {
         _isLoading = false;
-        _spots = [];
+        _temperatureSpots = [];
+        _humiditySpots = [];
       });
+    }
+  }
+
+  List<FlSpot> _convertToSpots(List<Map<String, dynamic>> data) {
+    return data.map((item) {
+      final hours = item['timestamp'].hour + (item['timestamp'].minute / 60);
+      return FlSpot(hours, item['value']);
+    }).toList();
+  }
+
+  void _updateXAxisRange() {
+    if (_temperatureSpots.isNotEmpty || _humiditySpots.isNotEmpty) {
+      final allSpots = [..._temperatureSpots, ..._humiditySpots];
+      _minX = allSpots.map((spot) => spot.x).reduce((a, b) => a < b ? a : b);
+      _maxX = allSpots.map((spot) => spot.x).reduce((a, b) => a > b ? a : b);
+    } else {
+      _minX = 0;
+      _maxX = 24;
     }
   }
 
@@ -81,9 +102,7 @@ class _ChartPageState extends State<ChartPage> {
     if (picked != null && picked != _selectedDate) {
       setState(() {
         _selectedDate = picked;
-        if (_selectedCage != null) {
-          _loadData(_selectedCage!.id);
-        }
+        _loadData();
       });
     }
   }
@@ -93,9 +112,7 @@ class _ChartPageState extends State<ChartPage> {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(_dataType == DataType.temperature
-            ? 'Temperature Chart'
-            : 'Humidity Chart'),
+        title: Text('Temperature and Humidity Chart'),
         actions: [
           IconButton(
             icon: Icon(Icons.calendar_today),
@@ -126,39 +143,6 @@ class _ChartPageState extends State<ChartPage> {
               ),
             ),
             ExpansionTile(
-              title: Text('Parameters'),
-              children: [
-                RadioListTile<DataType>(
-                  title: Text('Temperature'),
-                  value: DataType.temperature,
-                  groupValue: _dataType,
-                  onChanged: (DataType? value) {
-                    setState(() {
-                      _dataType = value!;
-                      if (_selectedCage != null) {
-                        _loadData(_selectedCage!.id);
-                      }
-                    });
-                    Navigator.pop(context);
-                  },
-                ),
-                RadioListTile<DataType>(
-                  title: Text('Humidity'),
-                  value: DataType.humidity,
-                  groupValue: _dataType,
-                  onChanged: (DataType? value) {
-                    setState(() {
-                      _dataType = value!;
-                      if (_selectedCage != null) {
-                        _loadData(_selectedCage!.id);
-                      }
-                    });
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-            ExpansionTile(
               title: Text('Cages'),
               children: _cages.map((cage) {
                 return RadioListTile<Cage>(
@@ -168,7 +152,7 @@ class _ChartPageState extends State<ChartPage> {
                   onChanged: (Cage? value) {
                     setState(() {
                       _selectedCage = value;
-                      _loadData(value!.id);
+                      _loadData();
                     });
                     Navigator.pop(context);
                   },
@@ -204,8 +188,16 @@ class _ChartPageState extends State<ChartPage> {
                               showTitles: true,
                               reservedSize: 40,
                               getTitlesWidget: (value, meta) {
-                                return Text(
-                                    '${value.toInt()}${_dataType == DataType.temperature ? '°C' : '%'}');
+                                return Text('${value.toInt()}');
+                              },
+                            ),
+                          ),
+                          rightTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 40,
+                              getTitlesWidget: (value, meta) {
+                                return Text('${value.toInt()}%');
                               },
                             ),
                           ),
@@ -213,34 +205,33 @@ class _ChartPageState extends State<ChartPage> {
                             sideTitles: SideTitles(
                               showTitles: true,
                               reservedSize: 30,
+                              interval: 3,
                               getTitlesWidget: (value, meta) {
-                                return Text('${value.toInt()}');
+                                final time = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, value.toInt(), (value % 1 * 60).toInt());
+                                return Text(_timeFormat.format(time));
                               },
                             ),
                           ),
                         ),
                         borderData: FlBorderData(show: true),
-                        minX: 0,
-                        maxX: _spots.length.toDouble() - 1,
-                        minY: _spots.isEmpty
-                            ? 0
-                            : _spots
-                                    .map((spot) => spot.y)
-                                    .reduce((a, b) => a < b ? a : b) -
-                                1,
-                        maxY: _spots.isEmpty
-                            ? 0
-                            : _spots
-                                    .map((spot) => spot.y)
-                                    .reduce((a, b) => a > b ? a : b) +
-                                1,
+                        minX: _minX,
+                        maxX: _maxX,
+                        minY: 0,
+                        maxY: 100,
                         lineBarsData: [
                           LineChartBarData(
-                            spots: _spots,
+                            spots: _temperatureSpots,
                             isCurved: true,
-                            color: _dataType == DataType.temperature
-                                ? Colors.red
-                                : Colors.blue,
+                            color: Colors.red,
+                            barWidth: 4,
+                            isStrokeCapRound: true,
+                            dotData: FlDotData(show: false),
+                            belowBarData: BarAreaData(show: false),
+                          ),
+                          LineChartBarData(
+                            spots: _humiditySpots,
+                            isCurved: true,
+                            color: Colors.blue,
                             barWidth: 4,
                             isStrokeCapRound: true,
                             dotData: FlDotData(show: false),
@@ -249,6 +240,17 @@ class _ChartPageState extends State<ChartPage> {
                         ],
                       ),
                     ),
+                  ),
+                  SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.thermostat, color: Colors.red),
+                      Text(' Temperature'),
+                      SizedBox(width: 20),
+                      Icon(Icons.opacity, color: Colors.blue),
+                      Text(' Humidity'),
+                    ],
                   ),
                 ],
               ),

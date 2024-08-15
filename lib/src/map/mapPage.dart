@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:gis_iot/src/database/database.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:convert';
+import 'package:gis_iot/src/pet/PetDetailPage.dart';
 
 class MapPage extends StatefulWidget {
   @override
@@ -15,7 +16,7 @@ class _MapPageState extends State<MapPage> {
   double currentZoom = 10.0;
   String mapUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
   final String namePackage = "com.example.app";
-  final LatLng mapLat = LatLng(22.406276, 105.624405);  // Tọa độ mặc định
+  final LatLng mapLat = LatLng(22.406276, 105.624405); // Tọa độ mặc định
 
   List<Polygon> polygons = [];
   List<MapPoint> mapPoints = [];
@@ -30,24 +31,26 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> loadGeoJson() async {
-    String jsonString = await rootBundle.loadString('lib/assets/geojson/vungLoi.geojson');
+    String jsonString =
+        await rootBundle.loadString('lib/assets/geojson/vungLoi.geojson');
     final jsonResult = json.decode(jsonString);
 
     setState(() {
       polygons = (jsonResult['features'] as List).map((feature) {
         List<LatLng> polygonCoords = [];
-        
+
         if (feature['geometry']['type'] == 'MultiPolygon') {
           List<dynamic> coordinates = feature['geometry']['coordinates'][0][0];
-          polygonCoords = coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
+          polygonCoords =
+              coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
         }
 
         return Polygon(
           points: polygonCoords,
-          color: Colors.blue.withOpacity(0.2),  // Màu đổ bên trong
+          color: Colors.blue.withOpacity(0.2),
           borderColor: Colors.blue,
           borderStrokeWidth: 2,
-          isFilled: true,  // Đảm bảo polygon được đổ màu
+          isFilled: true,
         );
       }).toList();
     });
@@ -61,11 +64,12 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  void _showPopup(MapPoint point) async {
+  void _showPopup(BuildContext context, MapPoint point) async {
     List<Pet> pets = await dbHelper.getPetsForCage(point.id);
-    double? latestTemperature = await dbHelper.getLatestTemperatureForCage(point.id);
+    double? latestTemperature =
+        await dbHelper.getLatestTemperatureForCage(point.id);
     double? latestHumidity = await dbHelper.getLatestHumidityForCage(point.id);
-    
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -77,15 +81,23 @@ class _MapPageState extends State<MapPage> {
                 Text(point.description),
                 SizedBox(height: 10),
                 if (latestTemperature != null)
-                  Text('Nhiệt độ mới nhất: ${latestTemperature.toStringAsFixed(1)}°C'),
+                  Text(
+                      'Nhiệt độ mới nhất: ${latestTemperature.toStringAsFixed(1)}°C'),
                 if (latestHumidity != null)
                   Text('Độ ẩm mới nhất: ${latestHumidity.toStringAsFixed(1)}%'),
                 SizedBox(height: 10),
                 Text('Danh sách các con vật:'),
-                ...pets.map((pet) => ListTile(
-                  title: Text(pet.name),
-                  subtitle: Text('Ngày sinh: ${pet.bornOn.toLocal().toString().split(' ')[0]}'),
-                )).toList(),
+                ...pets
+                    .map((pet) => ListTile(
+                          title: Text(pet.name),
+                          subtitle: Text(
+                              'Ngày sinh: ${pet.bornOn.toLocal().toString().split(' ')[0]}'),
+                          onTap: () {
+                            Navigator.pop(context); // Đóng dialog
+                            _navigateToPetDetailPage(context, pet);
+                          },
+                        ))
+                    .toList(),
               ],
             ),
           ),
@@ -100,6 +112,29 @@ class _MapPageState extends State<MapPage> {
         );
       },
     );
+  }
+
+  void _navigateToPetDetailPage(BuildContext context, Pet pet) async {
+    // Lấy thông tin chuồng của pet
+    Cage? cage = await dbHelper.getCageById(pet.cageId);
+    if (cage != null) {
+      // Tạo đối tượng PetWithCage
+      PetWithCage petWithCage = PetWithCage(
+        id: pet.id,
+        name: pet.name,
+        bornOn: pet.bornOn,
+        petCode: pet.petCode,
+        cageName: cage.name,
+      );
+
+      // Điều hướng đến PetDetailPage
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PetDetailPage(pet: petWithCage),
+        ),
+      );
+    }
   }
 
   void _zoomIn() {
@@ -131,15 +166,18 @@ class _MapPageState extends State<MapPage> {
               ),
               PolygonLayer(polygons: polygons),
               MarkerLayer(
-                markers: mapPoints.map((point) => Marker(
-                  width: 80.0,
-                  height: 80.0,
-                  point: point.location,
-                  builder: (ctx) => GestureDetector(
-                    onTap: () => _showPopup(point),
-                    child: Icon(Icons.location_on, color: Colors.red, size: 40),
-                  ),
-                )).toList(),
+                markers: mapPoints
+                    .map((point) => Marker(
+                          width: 80.0,
+                          height: 80.0,
+                          point: point.location,
+                          builder: (ctx) => GestureDetector(
+                            onTap: () => _showPopup(context, point),
+                            child: Icon(Icons.location_on,
+                                color: Colors.red, size: 40),
+                          ),
+                        ))
+                    .toList(),
               ),
             ],
           ),

@@ -14,6 +14,7 @@ class _HomePageState extends State<HomePage> {
   List<String> _alerts = [];
   bool _isLoading = true;
   Cage? _currentCage;
+  List<Cage> _cages = [];
   Task? _nextTask;
   List<Task> _completedTasksToday = [];
   List<SpeciesCount> _speciesCounts = [];
@@ -33,15 +34,17 @@ class _HomePageState extends State<HomePage> {
       final db = DatabaseHelper();
       await db.connect();
 
-      final cages = await db.getCages();
+      _cages = await db.getCages();
 
-      if (cages.isNotEmpty) {
-        _currentCage = cages.first;
-        final temperatures = await db.getTemperaturesForCage(_currentCage!.id);
+      if (_cages.isNotEmpty) {
+        _currentCage = _currentCage ?? _cages.first;
+        await _loadTemperatureData();
+
+        // Lấy tất cả các công việc
+        List<Task> allTasks = await db.getTasks();
 
         // Lấy công việc tiếp theo cần làm
-        List<Task> tasks = await db.getTasks();
-        _nextTask = tasks.firstWhere(
+        _nextTask = allTasks.firstWhere(
           (task) =>
               !task.done &&
               (task.time == null || task.time!.isAfter(DateTime.now())),
@@ -50,7 +53,7 @@ class _HomePageState extends State<HomePage> {
         );
 
         // Lấy danh sách công việc đã hoàn thành trong ngày
-        _completedTasksToday = tasks
+        _completedTasksToday = allTasks
             .where((task) =>
                 task.done &&
                 task.time != null &&
@@ -63,10 +66,6 @@ class _HomePageState extends State<HomePage> {
         _speciesCounts = await db.getSpeciesCounts();
 
         setState(() {
-          _recentTemperatures = temperatures;
-          _currentTemperature =
-              temperatures.isNotEmpty ? temperatures.first : 0;
-          _generateAlerts();
           _isLoading = false;
         });
       } else {
@@ -82,6 +81,21 @@ class _HomePageState extends State<HomePage> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _loadTemperatureData() async {
+    if (_currentCage == null) return;
+
+    final db = DatabaseHelper();
+    await db.connect();
+    final temperatures = await db.getTemperaturesForCage(_currentCage!.id);
+    await db.close();
+
+    setState(() {
+      _recentTemperatures = temperatures;
+      _currentTemperature = temperatures.isNotEmpty ? temperatures.first : 0;
+      _generateAlerts();
+    });
   }
 
   void _generateAlerts() {
@@ -124,6 +138,8 @@ class _HomePageState extends State<HomePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _buildCageSelector(),
+                      SizedBox(height: 20),
                       _buildCurrentTemperature(),
                       SizedBox(height: 20),
                       _buildRecentTemperatures(),
@@ -143,6 +159,29 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+Widget _buildCageSelector() {
+  return DropdownButton<String>(
+    value: _currentCage?.name,
+    hint: Text("Chọn chuồng"),
+    items: _cages.isNotEmpty
+        ? _cages.map((Cage cage) {
+            return DropdownMenuItem<String>(
+              value: cage.name,
+              child: Text(cage.name),
+            );
+          }).toList()
+        : [],
+    onChanged: (String? newValue) {
+      setState(() {
+        _currentCage = _cages.firstWhere((cage) => cage.name == newValue);
+      });
+      if (newValue != null) {
+        _loadTemperatureData();
+      }
+    },
+  );
+}
+
   Widget _buildCurrentTemperature() {
     return Card(
       child: Padding(
@@ -150,7 +189,7 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           children: [
             Text(
-              "Nhiệt độ hiện tại${_currentCage != null ? ' - ${_currentCage!.name}' : ''}",
+              "Nhiệt độ hiện tại - ${_currentCage?.name ?? 'Chưa chọn chuồng'}",
               style: Theme.of(context).textTheme.titleLarge,
             ),
             SizedBox(height: 10),
@@ -358,7 +397,14 @@ class _HomePageState extends State<HomePage> {
       await db.connect();
       await db.updateTaskStatus(task.id, true);
       await db.close();
-      await _loadData(); // Reload data after completing the task
+
+      // Hiển thị thông báo thành công
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Công việc đã được hoàn thành')),
+      );
+
+      // Cập nhật dữ liệu
+      await _loadData();
     } catch (e) {
       print('Error completing task: $e');
       ScaffoldMessenger.of(context).showSnackBar(

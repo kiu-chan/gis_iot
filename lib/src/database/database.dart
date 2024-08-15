@@ -113,7 +113,7 @@ class DatabaseHelper {
 
   Future<void> connect() async {
     _connection = PostgreSQLConnection(
-      '192.168.1.30',
+      '192.168.1.238',
       5432,
       'gis_iot',
       username: 'postgres',
@@ -146,6 +146,50 @@ class DatabaseHelper {
       if (row[0] == null) return 0.0; // or another default value
       // Safely parse the string to double
       return double.tryParse(row[0].toString()) ?? 0.0;
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getTemperaturesForCageAndDate(
+      int cageId, DateTime date) async {
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = startOfDay.add(Duration(days: 1));
+
+    final results = await _connection!.query(
+      'SELECT value, created_at FROM temperatures WHERE cage_id = @cageId AND created_at >= @startOfDay AND created_at < @endOfDay ORDER BY created_at',
+      substitutionValues: {
+        'cageId': cageId,
+        'startOfDay': startOfDay.toUtc(),
+        'endOfDay': endOfDay.toUtc(),
+      },
+    );
+
+    return results.map<Map<String, dynamic>>((row) {
+      return {
+        'value': double.tryParse(row[0].toString()) ?? 0.0,
+        'timestamp': (row[1] as DateTime).toLocal(),
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getHumiditiesForCageAndDate(
+      int cageId, DateTime date) async {
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = startOfDay.add(Duration(days: 1));
+
+    final results = await _connection!.query(
+      'SELECT value, created_at FROM humidities WHERE cage_id = @cageId AND created_at >= @startOfDay AND created_at < @endOfDay ORDER BY created_at',
+      substitutionValues: {
+        'cageId': cageId,
+        'startOfDay': startOfDay.toUtc(),
+        'endOfDay': endOfDay.toUtc(),
+      },
+    );
+
+    return results.map<Map<String, dynamic>>((row) {
+      return {
+        'value': double.tryParse(row[0].toString()) ?? 0.0,
+        'timestamp': (row[1] as DateTime).toLocal(),
+      };
     }).toList();
   }
 
@@ -310,6 +354,21 @@ class DatabaseHelper {
               cageId: row[4] as int,
             ))
         .toList();
+  }
+
+  Future<Cage?> getCageById(int cageId) async {
+    final results = await _connection!.query(
+      'SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude FROM cages WHERE id = @cageId',
+      substitutionValues: {'cageId': cageId},
+    );
+    if (results.isNotEmpty) {
+      return Cage(
+        id: results[0][0] as int,
+        name: results[0][1] as String,
+        location: LatLng(results[0][3] as double, results[0][2] as double),
+      );
+    }
+    return null;
   }
 
   Future<List<PetWithCage>> getAllPetsWithCage() async {
