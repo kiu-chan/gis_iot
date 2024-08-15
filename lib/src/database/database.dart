@@ -200,7 +200,13 @@ class DatabaseHelper {
       'SELECT value FROM temperatures WHERE cage_id = @cageId ORDER BY created_at DESC LIMIT 1',
       substitutionValues: {'cageId': cageId},
     );
-    return results.isNotEmpty ? results[0][0] as double : null;
+
+    if (results.isNotEmpty && results[0][0] != null) {
+      // Safely parse the string to double
+      return double.tryParse(results[0][0].toString());
+    } else {
+      return null;
+    }
   }
 
   Future<double?> getLatestHumidityForCage(int cageId) async {
@@ -208,7 +214,13 @@ class DatabaseHelper {
       'SELECT value FROM humidities WHERE cage_id = @cageId ORDER BY created_at DESC LIMIT 1',
       substitutionValues: {'cageId': cageId},
     );
-    return results.isNotEmpty ? results[0][0] as double : null;
+
+    if (results.isNotEmpty && results[0][0] != null) {
+      // Safely parse the string to double
+      return double.tryParse(results[0][0].toString());
+    } else {
+      return null;
+    }
   }
 
   Future<List<Task>> getTasks() async {
