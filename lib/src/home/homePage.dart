@@ -29,43 +29,55 @@ class _HomePageState extends State<HomePage> {
       _isLoading = true;
     });
 
-    final db = DatabaseHelper();
-    await db.connect();
-    
-    final cages = await db.getCages();
-    
-    if (cages.isNotEmpty) {
-      _currentCage = cages.first;
-      final temperatures = await db.getTemperaturesForCage(_currentCage!.id);
-      
-      // Lấy công việc tiếp theo cần làm
-      List<Task> tasks = await db.getTasks();
-      _nextTask = tasks.where(
-        (task) => !task.done && (task.time == null || task.time!.isAfter(DateTime.now()))
-      ).firstOrNull;
-      
-      // Lấy danh sách công việc đã hoàn thành trong ngày
-      _completedTasksToday = tasks.where((task) => 
-        task.done && 
-        task.time != null && 
-        task.time!.year == DateTime.now().year &&
-        task.time!.month == DateTime.now().month &&
-        task.time!.day == DateTime.now().day
-      ).toList();
+    try {
+      final db = DatabaseHelper();
+      await db.connect();
 
-      // Lấy danh sách các loài và số lượng
-      _speciesCounts = await db.getSpeciesCounts();
+      final cages = await db.getCages();
+
+      if (cages.isNotEmpty) {
+        _currentCage = cages.first;
+        final temperatures = await db.getTemperaturesForCage(_currentCage!.id);
+
+        // Lấy công việc tiếp theo cần làm
+        List<Task> tasks = await db.getTasks();
+        _nextTask = tasks.firstWhere(
+          (task) =>
+              !task.done &&
+              (task.time == null || task.time!.isAfter(DateTime.now())),
+          orElse: () => Task(
+              id: -1, workContent: '', createdAt: DateTime.now(), done: false),
+        );
+
+        // Lấy danh sách công việc đã hoàn thành trong ngày
+        _completedTasksToday = tasks
+            .where((task) =>
+                task.done &&
+                task.time != null &&
+                task.time!.year == DateTime.now().year &&
+                task.time!.month == DateTime.now().month &&
+                task.time!.day == DateTime.now().day)
+            .toList();
+
+        // Lấy danh sách các loài và số lượng
+        _speciesCounts = await db.getSpeciesCounts();
+
+        setState(() {
+          _recentTemperatures = temperatures;
+          _currentTemperature =
+              temperatures.isNotEmpty ? temperatures.first : 0;
+          _generateAlerts();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
 
       await db.close();
-
-      setState(() {
-        _recentTemperatures = temperatures;
-        _currentTemperature = temperatures.isNotEmpty ? temperatures.first : 0;
-        _generateAlerts();
-        _isLoading = false;
-      });
-    } else {
-      await db.close();
+    } catch (e) {
+      print('Error loading data: $e');
       setState(() {
         _isLoading = false;
       });
@@ -75,10 +87,12 @@ class _HomePageState extends State<HomePage> {
   void _generateAlerts() {
     _alerts.clear();
     if (_currentTemperature > 30) {
-      _alerts.add("Cảnh báo nhiệt độ cao: ${_currentTemperature.toStringAsFixed(1)}°C");
+      _alerts.add(
+          "Cảnh báo nhiệt độ cao: ${_currentTemperature.toStringAsFixed(1)}°C");
     }
     if (_currentTemperature < 10) {
-      _alerts.add("Cảnh báo nhiệt độ thấp: ${_currentTemperature.toStringAsFixed(1)}°C");
+      _alerts.add(
+          "Cảnh báo nhiệt độ thấp: ${_currentTemperature.toStringAsFixed(1)}°C");
     }
   }
 
@@ -88,37 +102,41 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: Text("Trang chủ"),
         actions: [
-        IconButton(
-          icon: Icon(Icons.pets),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => PetListPage()),
-            );
-          },
-        ),
-      ],
+          IconButton(
+            icon: Icon(Icons.pets),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => PetListPage()),
+              );
+            },
+          ),
+        ],
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildCurrentTemperature(),
-                    SizedBox(height: 20),
-                    _buildRecentTemperatures(),
-                    SizedBox(height: 20),
-                    _buildAlerts(),
-                    SizedBox(height: 20),
-                    _buildNextTask(),
-                    SizedBox(height: 20),
-                    _buildCompletedTasks(),
-                    SizedBox(height: 20),
-                    _buildSpeciesList(),
-                  ],
+          : RefreshIndicator(
+              onRefresh: _loadData,
+              child: SingleChildScrollView(
+                physics: AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildCurrentTemperature(),
+                      SizedBox(height: 20),
+                      _buildRecentTemperatures(),
+                      SizedBox(height: 20),
+                      _buildAlerts(),
+                      SizedBox(height: 20),
+                      _buildNextTask(),
+                      SizedBox(height: 20),
+                      _buildCompletedTasks(),
+                      SizedBox(height: 20),
+                      _buildSpeciesList(),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -218,7 +236,7 @@ class _HomePageState extends State<HomePage> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             SizedBox(height: 10),
-            _nextTask != null
+            _nextTask != null && _nextTask!.id != -1
                 ? ListTile(
                     title: Text(_nextTask!.workContent),
                     subtitle: Text(_nextTask!.time != null
@@ -259,9 +277,9 @@ class _HomePageState extends State<HomePage> {
                         final task = _completedTasksToday[index];
                         return ListTile(
                           title: Text(task.workContent),
-                          subtitle: Text(task.time != null 
-                            ? DateFormat('HH:mm').format(task.time!) 
-                            : 'Không có thời gian'),
+                          subtitle: Text(task.time != null
+                              ? DateFormat('HH:mm').format(task.time!)
+                              : 'Không có thời gian'),
                         );
                       },
                     ),
@@ -314,7 +332,8 @@ class _HomePageState extends State<HomePage> {
               children: <Widget>[
                 Text('Nội dung: ${task.workContent}'),
                 SizedBox(height: 10),
-                Text('Thời gian: ${task.time != null ? DateFormat('HH:mm dd/MM/yyyy').format(task.time!) : 'Không có'}'),
+                Text(
+                    'Thời gian: ${task.time != null ? DateFormat('HH:mm dd/MM/yyyy').format(task.time!) : 'Không có'}'),
                 SizedBox(height: 10),
                 Text('Ghi chú: ${task.note ?? 'Không có'}'),
               ],
@@ -333,43 +352,60 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _completeTask(Task task) async {
-    final db = DatabaseHelper();
-    await db.connect();
-    await db.updateTaskStatus(task.id, true);
-    await db.close();
-    _loadData();  // Reload data after completing the task
+  Future<void> _completeTask(Task task) async {
+    try {
+      final db = DatabaseHelper();
+      await db.connect();
+      await db.updateTaskStatus(task.id, true);
+      await db.close();
+      await _loadData(); // Reload data after completing the task
+    } catch (e) {
+      print('Error completing task: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Có lỗi xảy ra khi hoàn thành công việc')),
+      );
+    }
   }
 
   void _showPetsBySpecies(String species) async {
-    final db = DatabaseHelper();
-    await db.connect();
-    List<Pet> pets = await db.getPetsBySpecies(species);
-    await db.close();
+    try {
+      final db = DatabaseHelper();
+      await db.connect();
+      List<Pet> pets = await db.getPetsBySpecies(species);
+      await db.close();
 
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Danh sách $species'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: pets.map((pet) => ListTile(
-                title: Text(pet.name),
-                subtitle: Text('Mã: ${pet.petCode}\nNgày sinh: ${DateFormat('dd/MM/yyyy').format(pet.bornOn)}'),
-              )).toList(),
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Danh sách $species'),
+            content: SingleChildScrollView(
+              child: ListBody(
+                children: pets
+                    .map((pet) => ListTile(
+                          title: Text(pet.name),
+                          subtitle: Text(
+                              'Mã: ${pet.petCode}\nNgày sinh: ${DateFormat('dd/MM/yyyy').format(pet.bornOn)}'),
+                        ))
+                    .toList(),
+              ),
             ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: Text('Đóng'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
-    );
+            actions: <Widget>[
+              TextButton(
+                child: Text('Đóng'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      print('Error loading pets by species: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Có lỗi xảy ra khi tải danh sách vật nuôi')),
+      );
+    }
   }
 }

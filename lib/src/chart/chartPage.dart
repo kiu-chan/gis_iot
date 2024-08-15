@@ -1,8 +1,7 @@
-// chartPage.dart
-
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:gis_iot/src/database/database.dart';
+import 'package:intl/intl.dart';
 
 enum DataType { temperature, humidity }
 
@@ -17,7 +16,9 @@ class _ChartPageState extends State<ChartPage> {
   bool _isLoading = true;
   List<Cage> _cages = [];
   Cage? _selectedCage;
-  DataType _dataType = DataType.temperature;
+  DataType _dataType = DataType.humidity;
+  DateTime _selectedDate = DateTime.now();
+  final DateFormat _dateFormat = DateFormat('yyyy-MM-dd');
 
   @override
   void initState() {
@@ -70,13 +71,36 @@ class _ChartPageState extends State<ChartPage> {
     }
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+        if (_selectedCage != null) {
+          _loadData(_selectedCage!.id);
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(_dataType == DataType.temperature ? 'Temperature Chart' : 'Humidity Chart'),
+        title: Text(_dataType == DataType.temperature
+            ? 'Temperature Chart'
+            : 'Humidity Chart'),
         actions: [
+          IconButton(
+            icon: Icon(Icons.calendar_today),
+            onPressed: () => _selectDate(context),
+          ),
           IconButton(
             icon: Icon(Icons.menu),
             onPressed: () {
@@ -164,6 +188,11 @@ class _ChartPageState extends State<ChartPage> {
                     'Selected Cage: ${_selectedCage?.name ?? "None"}',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Date: ${_dateFormat.format(_selectedDate)}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   SizedBox(height: 16),
                   Expanded(
                     child: LineChart(
@@ -175,7 +204,8 @@ class _ChartPageState extends State<ChartPage> {
                               showTitles: true,
                               reservedSize: 40,
                               getTitlesWidget: (value, meta) {
-                                return Text('${value.toInt()}${_dataType == DataType.temperature ? '°C' : '%'}');
+                                return Text(
+                                    '${value.toInt()}${_dataType == DataType.temperature ? '°C' : '%'}');
                               },
                             ),
                           ),
@@ -192,13 +222,25 @@ class _ChartPageState extends State<ChartPage> {
                         borderData: FlBorderData(show: true),
                         minX: 0,
                         maxX: _spots.length.toDouble() - 1,
-                        minY: _spots.isEmpty ? 0 : _spots.map((spot) => spot.y).reduce((a, b) => a < b ? a : b) - 1,
-                        maxY: _spots.isEmpty ? 0 : _spots.map((spot) => spot.y).reduce((a, b) => a > b ? a : b) + 1,
+                        minY: _spots.isEmpty
+                            ? 0
+                            : _spots
+                                    .map((spot) => spot.y)
+                                    .reduce((a, b) => a < b ? a : b) -
+                                1,
+                        maxY: _spots.isEmpty
+                            ? 0
+                            : _spots
+                                    .map((spot) => spot.y)
+                                    .reduce((a, b) => a > b ? a : b) +
+                                1,
                         lineBarsData: [
                           LineChartBarData(
                             spots: _spots,
                             isCurved: true,
-                            color: _dataType == DataType.temperature ? Colors.red : Colors.blue,
+                            color: _dataType == DataType.temperature
+                                ? Colors.red
+                                : Colors.blue,
                             barWidth: 4,
                             isStrokeCapRound: true,
                             dotData: FlDotData(show: false),
